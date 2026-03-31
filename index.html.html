@@ -6622,13 +6622,25 @@ const UPGRADE_MSGS = {
    Ejemplo anual:   FULL-ANU-2026-ZX9M
 ================================================================ */
 
+// ── CÓDIGOS ESPECIALES — OWNER / ADMIN / MOD ──
+// ⚠ NUNCA compartas estos códigos con usuarios normales
+// Tipo 'eterno' = sin vencimiento, Full ilimitado
+const NEXUS_PRIVILEGED = {
+  // 👑 OWNER — Acceso total, sin vencimiento, badge especial
+  'NEXUS-OWNER-CWEX-4R38-XVOX': { plan:'full', tipo:'eterno', rol:'owner', label:'Owner' },
+
+  // 🛡 ADMIN — Acceso Full sin vencimiento
+  'NEXUS-ADMIN-AZOX-0CS3-GD4Y': { plan:'full', tipo:'eterno', rol:'admin', label:'Admin' },
+
+  // 🔧 MODERADOR — Acceso Pro sin vencimiento
+  'NEXUS-MOD-6HX2-CJ3Q-ZAGH':   { plan:'pro',  tipo:'eterno', rol:'mod',   label:'Moderador' },
+};
+
 // ── TABLA DE CÓDIGOS VÁLIDOS (tú los cambias cada mes) ──
 // Para generar: elige cualquier sufijo de 4 letras mayúsculas
 // Agrega aquí los códigos que quieras activar
 const NEXUS_CODES = {
   // PLAN PRO — MENSUAL (S/5/mes)
-  // Formato: 'CODIGO': { plan, tipo, mesVence (1-12), añoVence, label }
-  // Cambia los códigos cada mes y manda el nuevo al usuario
   'PRO-MES-042026-NX7K': { plan:'pro',  tipo:'mensual', mesVence:4,  añoVence:2026, label:'Pro Mensual' },
   'PRO-MES-052026-KM3P': { plan:'pro',  tipo:'mensual', mesVence:5,  añoVence:2026, label:'Pro Mensual' },
   'PRO-MES-062026-RT5Q': { plan:'pro',  tipo:'mensual', mesVence:6,  añoVence:2026, label:'Pro Mensual' },
@@ -6661,16 +6673,23 @@ const NEXUS_CODES = {
 
 function validarCodigo(raw){
   const code = raw.trim().toUpperCase();
+
+  // ── Verificar primero si es código privilegiado ──
+  const priv = NEXUS_PRIVILEGED[code];
+  if(priv){
+    return { ok:true, entry:priv, code, privileged:true };
+  }
+
   const entry = NEXUS_CODES[code];
   if(!entry) return { ok:false, msg:'Código no válido. Verifica que lo copiaste correctamente.' };
 
   const now = new Date();
-  const mesActual = now.getMonth() + 1; // 1-12
+  const mesActual = now.getMonth() + 1;
   const añoActual = now.getFullYear();
 
   // Verificar vencimiento
   if(entry.tipo === 'mensual'){
-    const venceEn = new Date(entry.añoVence, entry.mesVence - 1, 1); // 1ro del mes de vencimiento
+    const venceEn = new Date(entry.añoVence, entry.mesVence - 1, 1);
     const inicioMesActual = new Date(añoActual, mesActual - 1, 1);
     if(inicioMesActual > venceEn){
       return { ok:false, msg:`Este código venció en ${entry.mesVence}/${entry.añoVence}. Contacta al administrador para renovar tu plan.` };
@@ -6681,13 +6700,7 @@ function validarCodigo(raw){
     }
   }
 
-  // Verificar si ya fue usado por otro usuario en este dispositivo (diferente plan/código)
-  const codigoGuardado = localStorage.getItem('nexus_codigo_activo');
-  if(codigoGuardado && codigoGuardado !== code && localStorage.getItem('nexus_plan') !== 'free'){
-    // Permite cambiar de código si el anterior venció
-  }
-
-  return { ok:true, entry, code };
+  return { ok:true, entry, code, privileged:false };
 }
 
 function activarConCodigo(){
@@ -6715,24 +6728,40 @@ function activarConCodigo(){
     }
 
     // Código válido — activar plan
-    const { entry, code } = result;
+    const { entry, code, privileged } = result;
     localStorage.setItem('nexus_plan', entry.plan);
     localStorage.setItem('nexus_codigo_activo', code);
     localStorage.setItem('nexus_plan_label', entry.label);
-    localStorage.setItem('nexus_plan_vence_mes', entry.mesVence);
-    localStorage.setItem('nexus_plan_vence_año', entry.añoVence);
     localStorage.setItem('nexus_plan_tipo', entry.tipo);
+    if(privileged){
+      localStorage.setItem('nexus_rol', entry.rol);
+      localStorage.setItem('nexus_plan_vence_mes', '99');
+      localStorage.setItem('nexus_plan_vence_año', '9999');
+    } else {
+      localStorage.setItem('nexus_rol', 'user');
+      localStorage.setItem('nexus_plan_vence_mes', entry.mesVence);
+      localStorage.setItem('nexus_plan_vence_año', entry.añoVence);
+    }
+
+    const ROL_ICONS = { owner:'👑', admin:'🛡', mod:'🔧', user:'' };
+    const ROL_COLORS = { owner:'#FFD700', admin:'#00F0FF', mod:'#00FF88', user:'#aa88ff' };
+    const rol = privileged ? entry.rol : 'user';
+    const icon = ROL_ICONS[rol] || '';
+    const color = ROL_COLORS[rol] || '#aa88ff';
+
+    const venceStr = privileged
+      ? '<span style="color:#00FF88;">Sin vencimiento</span>'
+      : entry.tipo === 'anual'
+        ? `hasta diciembre ${entry.añoVence}`
+        : `hasta fin de ${['','enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'][entry.mesVence]} ${entry.añoVence}`;
 
     const box = document.querySelector('.up-box');
-    const venceStr = entry.tipo === 'anual'
-      ? `hasta diciembre ${entry.añoVence}`
-      : `hasta fin de ${['','enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'][entry.mesVence]} ${entry.añoVence}`;
-
     box.innerHTML = `
       <div style="text-align:center;padding:24px 0 16px;">
-        <div style="font-size:2.8rem;margin-bottom:14px;">${entry.plan==='full'?'👑':'⚡'}</div>
-        <div style="font-family:'Orbitron';font-size:.85rem;letter-spacing:5px;color:${entry.plan==='full'?'#aa88ff':'#00F0FF'};margin-bottom:8px;">PLAN ${entry.plan.toUpperCase()} ACTIVADO</div>
-        <div style="font-family:'Share Tech Mono';font-size:.46rem;letter-spacing:2px;color:rgba(0,255,136,.7);margin-bottom:6px;">✓ ${entry.label}</div>
+        <div style="font-size:2.8rem;margin-bottom:14px;">${icon||( entry.plan==='full'?'👑':'⚡')}</div>
+        <div style="font-family:'Orbitron';font-size:.85rem;letter-spacing:5px;color:${color};margin-bottom:8px;">${entry.label.toUpperCase()} ACTIVADO</div>
+        ${privileged?`<div style="font-family:'Share Tech Mono';font-size:.46rem;letter-spacing:3px;color:${color};margin-bottom:6px;">ROL: ${entry.rol.toUpperCase()}</div>`:''}
+        <div style="font-family:'Share Tech Mono';font-size:.42rem;letter-spacing:2px;color:rgba(0,255,136,.7);margin-bottom:6px;">✓ Acceso ${entry.plan.toUpperCase()}</div>
         <div style="font-family:'Rajdhani';font-size:.9rem;color:rgba(180,210,255,.6);margin-bottom:20px;">Válido ${venceStr}</div>
         <div style="font-family:'Rajdhani';color:rgba(200,220,255,.5);font-size:.85rem;">Cargando NEXUS AI...</div>
       </div>`;
@@ -6746,13 +6775,15 @@ function activarConCodigo(){
   const planGuardado = localStorage.getItem('nexus_plan');
   if(!codigoGuardado || planGuardado === 'free') return;
 
+  // Códigos privilegiados nunca vencen
+  if(NEXUS_PRIVILEGED[codigoGuardado]) return;
+
   const result = validarCodigo(codigoGuardado);
   if(!result.ok){
-    // Código venció — degradar a free
     localStorage.setItem('nexus_plan', 'free');
     localStorage.removeItem('nexus_codigo_activo');
     localStorage.removeItem('nexus_plan_label');
-    // Notificar al usuario
+    localStorage.removeItem('nexus_rol');
     setTimeout(()=>{
       showUpgradeModal('pro','default','⏰ Tu plan ha vencido. Renueva para seguir disfrutando de NEXUS AI.');
     }, 1200);
@@ -6816,19 +6847,32 @@ function upSelectPlan(plan){
 // ── INIT PLAN UI ──
 (function initPlanUI(){
   const badge = document.getElementById('plan-badge');
-  if(badge){
-    const label = localStorage.getItem('nexus_plan_label') || PLAN_NAMES[NEXUS_PLAN] || 'FREE';
-    badge.textContent = NEXUS_PLAN==='free' ? 'FREE' : label.split(' ')[0].toUpperCase();
-    badge.className = NEXUS_PLAN;
-  }
+  const rol = localStorage.getItem('nexus_rol') || 'user';
+  const ROL_ICONS  = { owner:'👑', admin:'🛡', mod:'🔧', user:'' };
+  const ROL_LABELS = { owner:'OWNER', admin:'ADMIN', mod:'MOD', user:'' };
+  const ROL_COLORS = { owner:'owner', admin:'admin', mod:'mod', user:'' };
 
-  // Mostrar vencimiento en badge tooltip
-  if(NEXUS_PLAN !== 'free'){
-    const mes = localStorage.getItem('nexus_plan_vence_mes');
-    const año = localStorage.getItem('nexus_plan_vence_año');
-    const tipo = localStorage.getItem('nexus_plan_tipo');
-    if(mes && año && badge){
-      badge.title = `Plan activo · Vence: ${tipo==='anual'?'dic '+año:mes+'/'+año}`;
+  if(badge){
+    if(rol !== 'user' && ROL_LABELS[rol]){
+      // Badge especial para roles privilegiados
+      badge.textContent = ROL_ICONS[rol] + ' ' + ROL_LABELS[rol];
+      badge.className = 'privileged-' + rol;
+      badge.style.cssText = {
+        owner: 'border:1px solid #FFD700;color:#FFD700;background:rgba(255,215,0,.1);box-shadow:0 0 12px rgba(255,215,0,.25);font-family:Share Tech Mono;font-size:.44rem;letter-spacing:2px;padding:3px 10px;border-radius:1px;cursor:pointer;',
+        admin: 'border:1px solid #00F0FF;color:#00F0FF;background:rgba(0,240,255,.12);box-shadow:0 0 10px rgba(0,240,255,.2);font-family:Share Tech Mono;font-size:.44rem;letter-spacing:2px;padding:3px 10px;border-radius:1px;cursor:pointer;',
+        mod:   'border:1px solid #00FF88;color:#00FF88;background:rgba(0,255,136,.1);box-shadow:0 0 10px rgba(0,255,136,.18);font-family:Share Tech Mono;font-size:.44rem;letter-spacing:2px;padding:3px 10px;border-radius:1px;cursor:pointer;',
+      }[rol] || '';
+      badge.title = `Acceso ${rol} — Sin vencimiento`;
+    } else {
+      const label = localStorage.getItem('nexus_plan_label') || PLAN_NAMES[NEXUS_PLAN] || 'FREE';
+      badge.textContent = NEXUS_PLAN==='free' ? 'FREE' : label.split(' ')[0].toUpperCase();
+      badge.className = NEXUS_PLAN;
+      const mes = localStorage.getItem('nexus_plan_vence_mes');
+      const año = localStorage.getItem('nexus_plan_vence_año');
+      const tipo = localStorage.getItem('nexus_plan_tipo');
+      if(mes && año && badge && mes !== '99'){
+        badge.title = `Plan activo · Vence: ${tipo==='anual'?'dic '+año:mes+'/'+año}`;
+      }
     }
   }
 
