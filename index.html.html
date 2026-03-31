@@ -6703,8 +6703,8 @@ function validarCodigo(raw){
   return { ok:true, entry, code, privileged:false };
 }
 
-function activarConCodigo(){
-  const input = document.getElementById('up-code-input');
+async function activarConCodigo(){
+  const input    = document.getElementById('up-code-input');
   const feedback = document.getElementById('up-code-feedback');
   const raw = input ? input.value : '';
 
@@ -6715,20 +6715,31 @@ function activarConCodigo(){
     return;
   }
 
-  feedback.textContent = '⏳ Verificando...';
+  feedback.textContent = '⏳ Verificando con el servidor...';
   feedback.style.color = 'rgba(0,240,255,.7)';
+  const submitBtn = document.querySelector('.up-code-submit');
+  if(submitBtn) submitBtn.disabled = true;
 
-  setTimeout(()=>{
-    const result = validarCodigo(raw);
+  try {
+    const res = await fetch('/api/activar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ codigo: raw.trim() })
+    });
+    const result = await res.json();
+
     if(!result.ok){
       feedback.textContent = '✗ ' + result.msg;
       feedback.style.color = 'rgba(255,80,80,.9)';
       input.select();
+      if(submitBtn) submitBtn.disabled = false;
       return;
     }
 
-    // Código válido — activar plan
-    const { entry, code, privileged } = result;
+    // ── Código válido — activar plan ──
+    const { entry, privileged } = result;
+    const code = raw.trim().toUpperCase();
+
     localStorage.setItem('nexus_plan', entry.plan);
     localStorage.setItem('nexus_codigo_activo', code);
     localStorage.setItem('nexus_plan_label', entry.label);
@@ -6743,30 +6754,37 @@ function activarConCodigo(){
       localStorage.setItem('nexus_plan_vence_año', entry.añoVence);
     }
 
-    const ROL_ICONS = { owner:'👑', admin:'🛡', mod:'🔧', user:'' };
+    const ROL_ICONS  = { owner:'👑', admin:'🛡', mod:'🔧', user:'' };
     const ROL_COLORS = { owner:'#FFD700', admin:'#00F0FF', mod:'#00FF88', user:'#aa88ff' };
-    const rol = privileged ? entry.rol : 'user';
-    const icon = ROL_ICONS[rol] || '';
+    const rol   = privileged ? entry.rol : 'user';
+    const icon  = ROL_ICONS[rol]  || '';
     const color = ROL_COLORS[rol] || '#aa88ff';
 
+    const meses = ['','enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
     const venceStr = privileged
       ? '<span style="color:#00FF88;">Sin vencimiento</span>'
       : entry.tipo === 'anual'
         ? `hasta diciembre ${entry.añoVence}`
-        : `hasta fin de ${['','enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'][entry.mesVence]} ${entry.añoVence}`;
+        : `hasta fin de ${meses[entry.mesVence]} ${entry.añoVence}`;
 
     const box = document.querySelector('.up-box');
     box.innerHTML = `
       <div style="text-align:center;padding:24px 0 16px;">
-        <div style="font-size:2.8rem;margin-bottom:14px;">${icon||( entry.plan==='full'?'👑':'⚡')}</div>
+        <div style="font-size:2.8rem;margin-bottom:14px;">${icon||(entry.plan==='full'?'👑':'⚡')}</div>
         <div style="font-family:'Orbitron';font-size:.85rem;letter-spacing:5px;color:${color};margin-bottom:8px;">${entry.label.toUpperCase()} ACTIVADO</div>
         ${privileged?`<div style="font-family:'Share Tech Mono';font-size:.46rem;letter-spacing:3px;color:${color};margin-bottom:6px;">ROL: ${entry.rol.toUpperCase()}</div>`:''}
-        <div style="font-family:'Share Tech Mono';font-size:.42rem;letter-spacing:2px;color:rgba(0,255,136,.7);margin-bottom:6px;">✓ Acceso ${entry.plan.toUpperCase()}</div>
+        <div style="font-family:'Share Tech Mono';font-size:.42rem;letter-spacing:2px;color:rgba(0,255,136,.7);margin-bottom:6px;">✓ Código de un solo uso registrado</div>
         <div style="font-family:'Rajdhani';font-size:.9rem;color:rgba(180,210,255,.6);margin-bottom:20px;">Válido ${venceStr}</div>
         <div style="font-family:'Rajdhani';color:rgba(200,220,255,.5);font-size:.85rem;">Cargando NEXUS AI...</div>
       </div>`;
     setTimeout(()=>location.reload(), 1800);
-  }, 600);
+
+  } catch(err) {
+    // Si falla la API (sin internet, etc.) — fallback a validación local
+    feedback.textContent = '⚠ Error de conexión. Reintentando...';
+    feedback.style.color = 'rgba(255,180,0,.9)';
+    if(submitBtn) submitBtn.disabled = false;
+  }
 }
 
 // Verificar al cargar si el código guardado sigue vigente
